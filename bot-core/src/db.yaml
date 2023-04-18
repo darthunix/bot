@@ -1,0 +1,31 @@
+extension plpgsql:
+  description: PL/pgSQL procedural language
+  schema: pg_catalog
+  version: '1.0'
+schema auth:
+  sequence user_id_seq:
+    cache_value: 1
+    increment_by: 1
+    max_value: null
+    min_value: null
+    owner_column: id
+    owner_table: user
+    start_value: 1
+  table user:
+    columns:
+    - id:
+        default: nextval('auth.user_id_seq'::regclass)
+        not_null: true
+        type: bigint
+    - name:
+        not_null: true
+        type: text
+    primary_key:
+      user_pk:
+        columns:
+        - id
+    unique_constraints:
+      user_name_uniq:
+        columns:
+        - name
+

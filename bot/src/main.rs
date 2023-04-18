@@ -1,5 +1,6 @@
 extern crate pretty_env_logger;
-use bot_core::storage::PostgresClient;
+use bot_core::postgres::{config_from_env, PgPool};
+use dotenv::dotenv;
 
 use teloxide::{
     dispatching::{dialogue::InMemStorage, HandlerExt, UpdateFilterExt},
@@ -22,13 +23,27 @@ pub enum State {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
     pretty_env_logger::init();
 
     log::info!("Starting bot...");
-
     let bot = Bot::from_env();
 
-    match PostgresClient::new("localhost", 5432, "darthunix", "bot").await {
+    let config = match config_from_env() {
+        Ok(config) => config,
+        Err(e) => {
+            log::error!("Error reading config: {}", e);
+            return;
+        }
+    };
+    let pool = match PgPool::new(config, 5) {
+        Ok(pool) => pool,
+        Err(e) => {
+            log::error!("Error creating pool: {}", e);
+            return;
+        }
+    };
+    match pool.get().await {
         Ok(_) => {
             log::info!("Connection to PG data base was established");
         }
