@@ -5,6 +5,10 @@ use tokio_postgres::{Config, NoTls};
 
 pub const DEFAULT_POOL_CAPACITY: usize = 10;
 
+/// Create a new `tokio_postgres::Config` from environment variables.
+///
+/// # Errors
+/// - Failed to parse the port.
 pub fn config_from_env() -> Result<Config> {
     let mut pg_config = tokio_postgres::Config::new();
     let host = env::var("PG_HOST").unwrap_or_else(|_| "localhost".to_string());
@@ -20,6 +24,7 @@ pub fn config_from_env() -> Result<Config> {
     Ok(pg_config)
 }
 
+#[must_use]
 pub fn capacity_from_env() -> usize {
     let capacity =
         env::var("PG_POOL_CAPACITY").unwrap_or_else(|_| DEFAULT_POOL_CAPACITY.to_string());
@@ -31,6 +36,10 @@ pub struct PgPool {
 }
 
 impl PgPool {
+    /// Create a new pool.
+    ///
+    /// # Errors
+    /// - Failed to build the pool (all questions to the deadpool crate).
     pub fn new(pg_config: Config, capacity: usize) -> Result<PgPool> {
         let mgr_config = ManagerConfig {
             recycling_method: RecyclingMethod::Fast,
@@ -40,6 +49,10 @@ impl PgPool {
         Ok(PgPool { pool })
     }
 
+    /// Get a connection from the pool.
+    ///
+    /// # Errors
+    /// - Failed to connect to the database (all questions to the deadpool crate).
     pub async fn get(&self) -> Result<Client> {
         let client = self.pool.get().await?;
         Ok(client)

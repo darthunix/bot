@@ -27,16 +27,19 @@ pub enum PgStorageError {
     StorageError(String),
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct PgStorage {
     pool: PgPool,
 }
 
 impl PgStorage {
+    #[must_use]
     pub fn new(pool: PgPool) -> Arc<Self> {
         let storage = Self { pool };
         Arc::new(storage)
     }
 
+    #[must_use]
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
@@ -96,7 +99,7 @@ where
                 Ok(data) => data,
                 Err(_) => return Ok(None),
             };
-            let dialogue: D = serde_json::from_str(&data)?;
+            let dialogue: D = serde_json::from_str(data)?;
             log::debug!("Fetched dialogue from the dialog: {:?}", dialogue);
             Ok(Some(dialogue))
         })
