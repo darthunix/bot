@@ -3,6 +3,8 @@ use deadpool_postgres::{Client, Manager, ManagerConfig, Pool, RecyclingMethod};
 use std::env;
 use tokio_postgres::{Config, NoTls};
 
+pub const DEFAULT_POOL_CAPACITY: usize = 10;
+
 pub fn config_from_env() -> Result<Config> {
     let mut pg_config = tokio_postgres::Config::new();
     let host = env::var("PG_HOST").unwrap_or_else(|_| "localhost".to_string());
@@ -16,6 +18,12 @@ pub fn config_from_env() -> Result<Config> {
     pg_config.dbname(&database);
 
     Ok(pg_config)
+}
+
+pub fn capacity_from_env() -> usize {
+    let capacity =
+        env::var("PG_POOL_CAPACITY").unwrap_or_else(|_| DEFAULT_POOL_CAPACITY.to_string());
+    capacity.parse().unwrap_or(DEFAULT_POOL_CAPACITY)
 }
 
 pub struct PgPool {

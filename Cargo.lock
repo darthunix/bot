@@ -87,6 +87,7 @@ dependencies = [
  "dotenv",
  "log",
  "pretty_env_logger",
+ "serde",
  "teloxide",
  "tokio",
 ]
@@ -97,9 +98,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "deadpool-postgres",
+ "futures",
  "log",
  "pretty_env_logger",
  "serde",
+ "serde_json",
+ "teloxide",
+ "thiserror",
  "tokio",
  "tokio-postgres",
 ]

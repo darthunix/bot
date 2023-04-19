@@ -2,6 +2,28 @@ extension plpgsql:
   description: PL/pgSQL procedural language
   schema: pg_catalog
   version: '1.0'
+schema api:
+  function chat_delete(chat_id bigint):
+    language: sql
+    returns: void
+    source: |-
+      update bot.dialogue set deleted = true where chat_id = $1
+  function dialogue_append(chat_id bigint, data text):
+    language: sql
+    returns: void
+    source: |2
+
+      insert into bot.chat(id) values($1) on conflict do nothing;
+      insert into bot.dialogue(chat_id, data) values($1, $2::jsonb);
+  function dialogue_latest(chat_id bigint):
+    language: sql
+    returns: text
+    source: |2
+
+      with latest(id) as (
+          select id from bot.dialogue where not deleted and chat_id = $1 order by id desc limit 1
+      )
+      select data::text from bot.dialogue where id = (select id from latest) and not deleted
 schema auth:
   sequence user_id_seq:
     cache_value: 1
@@ -28,4 +50,60 @@ schema auth:
       user_name_uniq:
         columns:
         - name
+schema bot:
+  sequence dialogue_id_seq:
+    cache_value: 1
+    increment_by: 1
+    max_value: null
+    min_value: null
+    owner_column: id
+    owner_table: dialogue
+    start_value: 1
+  table chat:
+    columns:
+    - id:
+        not_null: true
+        type: bigint
+    primary_key:
+      bot_pk:
+        columns:
+        - id
+  table dialogue:
+    columns:
+    - id:
+        default: nextval('bot.dialogue_id_seq'::regclass)
+        not_null: true
+        type: bigint
+    - chat_id:
+        not_null: true
+        type: bigint
+    - data:
+        not_null: true
+        type: jsonb
+    - deleted:
+        default: 'false'
+        not_null: true
+        type: boolean
+    foreign_keys:
+      chat_id_fk:
+        columns:
+        - chat_id
+        deferrable: true
+        deferred: true
+        references:
+          columns:
+          - id
+          schema: bot
+          table: chat
+    indexes:
+      dialogue_chat_idx:
+        keys:
+        - chat_id
+        - id:
+            order: desc
+        predicate: (NOT deleted)
+    primary_key:
+      dialogue_pk:
+        columns:
+        - id
 
