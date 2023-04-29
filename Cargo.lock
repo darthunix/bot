@@ -80,7 +80,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "bot"
+name = "bot-client"
 version = "0.1.0"
 dependencies = [
  "bot-core",

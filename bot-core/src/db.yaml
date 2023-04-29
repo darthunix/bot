@@ -6,8 +6,16 @@ schema api:
   function chat_delete(chat_id bigint):
     language: sql
     returns: void
-    source: |-
+    source: |2
+
       update bot.dialogue set deleted = true where chat_id = $1
+  function chat_update(chat_id bigint, login text):
+    language: sql
+    returns: void
+    source: |2
+
+      select api.login_update($2);
+      insert into bot.chat(id, login) values($1, $2) on conflict (id) do update set login = EXCLUDED.login;
   function dialogue_append(chat_id bigint, data text):
     language: sql
     returns: void
@@ -24,6 +32,31 @@ schema api:
           select id from bot.dialogue where not deleted and chat_id = $1 order by id desc limit 1
       )
       select data::text from bot.dialogue where id = (select id from latest) and not deleted
+  function login_get(chat_id bigint):
+    language: sql
+    returns: text
+    source: |2
+
+      select login from bot.chat where id = $1;
+  function login_update(login text):
+    language: sql
+    returns: void
+    source: |2
+
+      insert into auth.user(login) values($1) on conflict do nothing;
+  function name_get(login text):
+    language: sql
+    returns: text
+    source: |2
+
+      select trim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) as name from auth.user where login = $1;
+  function name_update(login text, first_name text, last_name text):
+    language: sql
+    returns: void
+    source: |2
+
+      select api.login_update($1);
+      update auth.user set first_name = $2, last_name = $3 where login = $1;
 schema auth:
   sequence user_id_seq:
     cache_value: 1
@@ -39,17 +72,21 @@ schema auth:
         default: nextval('auth.user_id_seq'::regclass)
         not_null: true
         type: bigint
-    - name:
+    - login:
         not_null: true
+        type: text
+    - last_name:
+        type: text
+    - first_name:
         type: text
     primary_key:
       user_pk:
         columns:
         - id
     unique_constraints:
-      user_name_uniq:
+      user_login_uniq:
         columns:
-        - name
+        - login
 schema bot:
   sequence dialogue_id_seq:
     cache_value: 1
@@ -64,6 +101,19 @@ schema bot:
     - id:
         not_null: true
         type: bigint
+    - login:
+        type: text
+    foreign_keys:
+      chat_login_fk:
+        columns:
+        - login
+        deferrable: true
+        deferred: true
+        references:
+          columns:
+          - login
+          schema: auth
+          table: user
     primary_key:
       bot_pk:
         columns:

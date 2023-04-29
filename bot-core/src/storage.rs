@@ -1,4 +1,4 @@
-use crate::postgres::PgPool;
+use crate::{postgres::PgPool, user::FullName};
 use anyhow::Error as AnyError;
 use deadpool_postgres::PoolError;
 use futures::future::BoxFuture;
@@ -42,6 +42,64 @@ impl PgStorage {
     #[must_use]
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub async fn chat_update(
+        &self,
+        ChatId(chat_id): ChatId,
+        login: &str,
+    ) -> Result<(), PgStorageError> {
+        let client = self.pool.get().await?;
+        client
+            .query("select api.chat_update($1, $2)", &[&chat_id, &login])
+            .await?;
+        Ok(())
+    }
+
+    pub async fn login_get(
+        &self,
+        ChatId(chat_id): ChatId,
+    ) -> Result<Option<String>, PgStorageError> {
+        let client = self.pool.get().await?;
+        let mut rows = client
+            .query("select api.login_get($1)", &[&chat_id])
+            .await?;
+        let row = match rows.pop() {
+            Some(row) => row,
+            None => return Ok(None),
+        };
+        let login: String = row.get(0);
+        Ok(Some(login))
+    }
+
+    pub async fn login_update(&self, login: &str) -> Result<(), PgStorageError> {
+        let client = self.pool.get().await?;
+        client
+            .query("select api.login_update($1)", &[&login])
+            .await?;
+        Ok(())
+    }
+
+    pub async fn name_update(&self, login: &str, name: &FullName) -> Result<(), PgStorageError> {
+        let client = self.pool.get().await?;
+        client
+            .query(
+                "select api.name_update($1, $2, $3)",
+                &[&login, &name.first, &name.last],
+            )
+            .await?;
+        Ok(())
+    }
+
+    pub async fn name_get(&self, login: &str) -> Result<Option<FullName>, PgStorageError> {
+        let client = self.pool.get().await?;
+        let mut rows = client.query("select api.name_get($1)", &[&login]).await?;
+        let row = match rows.pop() {
+            Some(row) => row,
+            None => return Ok(None),
+        };
+        let name: String = row.get(0);
+        Ok(FullName::try_from_str(&name))
     }
 }
 
