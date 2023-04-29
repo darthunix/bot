@@ -119,11 +119,53 @@ fn unpack_name(msg: &Message) -> Option<FullName> {
     }
 }
 
-async fn start(dialogue: MyDialogue, msg: Message, storage: Arc<PgStorage>) -> HandlerResult {
+async fn goto_request_login(bot: Bot, dialogue: MyDialogue) -> HandlerResult {
+    log::debug!("goto RequestLogin");
+    dialogue.update(State::RequestLogin).await?;
+    bot.send_message(dialogue.chat_id(), "Please send me your username.")
+        .await?;
+    Ok(())
+}
+
+async fn goto_request_full_name(bot: Bot, dialogue: MyDialogue) -> HandlerResult {
+    log::debug!("goto RequestFullName");
+    dialogue.update(State::RequestFullName).await?;
+    bot.send_message(
+        dialogue.chat_id(),
+        "Please send me your full name (first and last name).",
+    )
+    .await?;
+    Ok(())
+}
+
+async fn goto_identified_user(bot: Bot, dialogue: MyDialogue) -> HandlerResult {
+    log::debug!("goto IdentifiedUser");
+    dialogue.update(State::IdentifiedUser).await?;
+    bot.send_message(
+        dialogue.chat_id(),
+        "You are identified. Use /get to get your user information and /reset to flush it.",
+    )
+    .await?;
+    Ok(())
+}
+
+async fn start(
+    bot: Bot,
+    dialogue: MyDialogue,
+    msg: Message,
+    storage: Arc<PgStorage>,
+) -> HandlerResult {
+    log::debug!("Start state");
+    if msg.text().is_none() {
+        bot.send_message(msg.chat.id, "Say hello to start the dialogue.")
+            .await?;
+        return Ok(());
+    }
     let login: String = match unpack_login(&msg) {
         Some(login) => {
             // We are lucky and have a public username in the chat.
             storage.chat_update(msg.chat.id, login).await?;
+            log::info!("User @{login} has logged in");
             String::from(login)
         }
         None => {
@@ -133,8 +175,7 @@ async fn start(dialogue: MyDialogue, msg: Message, storage: Arc<PgStorage>) -> H
                 login
             } else {
                 // Let's go to the next state and ask for the username.
-                dialogue.update(State::RequestLogin).await?;
-                return Ok(());
+                return goto_request_login(bot, dialogue).await;
             }
         }
     };
@@ -143,13 +184,13 @@ async fn start(dialogue: MyDialogue, msg: Message, storage: Arc<PgStorage>) -> H
             // We are lucky and have a full name in the chat.
             // Let's store it to the database and go to the next state.
             storage.name_update(&login, &full_name).await?;
-            dialogue.update(State::IdentifiedUser).await?;
+            log::info!("User @{login} has identified himself as {full_name:?}");
+            goto_identified_user(bot, dialogue).await?;
         }
         None => {
             if storage.name_get(&login).await?.is_none() {
                 // Let's go to the next state and ask for the full name.
-                dialogue.update(State::RequestFullName).await?;
-                return Ok(());
+                return goto_request_full_name(bot, dialogue).await;
             }
         }
     };
@@ -162,12 +203,13 @@ async fn request_login(
     msg: Message,
     storage: Arc<PgStorage>,
 ) -> HandlerResult {
+    log::debug!("RequestLogin state");
     match msg.text() {
         Some(login) => {
             // We have received a username, let's store it to the database
             // and go to the next state.
             storage.chat_update(msg.chat.id, login).await?;
-            dialogue.update(State::RequestFullName).await?;
+            goto_request_full_name(bot, dialogue).await?;
         }
         None => {
             // Let's ask for a username and stay in the same state.
@@ -184,6 +226,7 @@ async fn request_full_name(
     msg: Message,
     storage: Arc<PgStorage>,
 ) -> HandlerResult {
+    log::debug!("RequestFullName state");
     match msg.text() {
         Some(full_name) => {
             // We have received a full name, let's store it to the database
@@ -201,12 +244,11 @@ async fn request_full_name(
                 None => {
                     // The username is not in the database, let's return back
                     // to the login request state.
-                    dialogue.update(State::RequestLogin).await?;
-                    return Ok(());
+                    return goto_request_login(bot, dialogue).await;
                 }
             };
             storage.name_update(&login, &full_name).await?;
-            dialogue.update(State::IdentifiedUser).await?;
+            goto_identified_user(bot, dialogue).await?;
         }
         None => {
             // Let's ask for a full name and stay in the same state.
@@ -224,11 +266,7 @@ async fn identified_user(
     cmd: Command,
     storage: Arc<PgStorage>,
 ) -> HandlerResult {
-    bot.send_message(
-        msg.chat.id,
-        "Send me a command: /get (to get your login) or /reset.",
-    )
-    .await?;
+    log::debug!("IdentifiedUser state");
     match cmd {
         Command::Get => {
             let login = match storage.login_get(msg.chat.id).await? {
@@ -236,8 +274,7 @@ async fn identified_user(
                 None => {
                     // The username is not in the database, let's return back
                     // to the login request state.
-                    dialogue.update(State::RequestLogin).await?;
-                    return Ok(());
+                    return goto_request_login(bot, dialogue).await;
                 }
             };
             bot.send_message(msg.chat.id, format!("Here is your username: {login}."))
@@ -245,8 +282,11 @@ async fn identified_user(
         }
         Command::Reset => {
             dialogue.reset().await?;
-            bot.send_message(msg.chat.id, "Your username was reset.")
-                .await?;
+            bot.send_message(
+                msg.chat.id,
+                "Your username was reset. Write any message to start the dialogue again.",
+            )
+            .await?;
         }
     }
     Ok(())
